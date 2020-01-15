@@ -12,12 +12,25 @@ function u = laplace_solver(w, center, h, tol, varargin)
     p = inputParser;
     addOptional(p, 'tests', false);
     addOptional(p, 'discont', false);
-    parse(p, varargin{:});
+    addOptional(p, 'curved', false)
+    addOptional(p, 'curves', []);
+    addOptional(p, 'curved_hull', []);
+    addOptional(p, 'plot3', false);
     
+    parse(p, varargin{:});
+    curved = p.Results.curved;
+    if curved, curves = p.Results.curves; end
+
     % Get the maximal diameter of the domain
     w_r = sort(real(w)); w_r = w_r([1 end]);
     w_i = sort(imag(w)); w_i = w_i([1 end]);
     scale = max([diff(w_r),diff(w_i)]);
+    
+    if curved
+        b_r = sort(real(p.Results.curved_hull)); b_r = b_r([1 end]);
+        b_i = sort(imag(p.Results.curved_hull)); b_i = b_i([1 end]);
+        scale = max([diff(b_r),diff(b_i)]);
+    end
     
     % Confirm validity of poles and boundary sampling points if tests on
     if p.Results.tests
@@ -25,21 +38,19 @@ function u = laplace_solver(w, center, h, tol, varargin)
         bdd = bdd_sample_test(w, poles, h, 3);
     end
     
-    
     % Increase n until convergence to specified tolerance.
     prev_err = inf; bdd = []; 
     for n = 3:50
-        % Exp. clustered poles at corners        
-        poles = compute_poles(w, scale, n);
+        % Exp. clustered poles at corners  
+        poles = compute_poles(w, scale, n, p);
         flat_poles = cell2mat(poles).';
         [~, N1] = size(flat_poles);
-        
         % Distance of poles from corners and boundary sample points
-        [bdd, dist] = bdd_sample(w, poles, h, n); 
+        [bdd, dist] = bdd_sample(w, poles, h, n, p); 
         [M,~] = size(bdd); 
         b = bdd(:,2); % Values at boundary points
         newman = dist./(bdd(:,1) - flat_poles);
-        
+
         % Polynomial approx in bulk
         N2 = ceil(n/2);
         runge = ((bdd(:,1) - center)./scale).^(1:N2); 
@@ -66,7 +77,7 @@ function u = laplace_solver(w, center, h, tol, varargin)
                 
         % Exit if tolerance reached or if error begins to increase 
         % as convergence is not possible due to numerical instability.
-        if err > prev_err || err <= tol
+        if err <= tol || err > prev_err*10 
             break;
         end
         prev_err = err;
@@ -82,6 +93,8 @@ function u = laplace_solver(w, center, h, tol, varargin)
     % Plotting Config
     LW = 'linewidth'; MS = 'markersize'; FS = 'fontsize';
     fs = 8; PO = 'position'; FW = 'fontweight'; NO = 'normal';
+    
+    if curved, w_r = b_r; w_i = b_i; w = p.Results.curved_hull; end
     ax = [w_r(1:2); w_i(1:2)] + .2*scale*[-1 1 -1 1]';
     axwide = [w_r(1:2); w_i(1:2)] + 1.1*scale*[-1 1 -1 1]';
 
@@ -90,20 +103,23 @@ function u = laplace_solver(w, center, h, tol, varargin)
     [xx,yy] = meshgrid(sx,sy); zz = xx + 1i*yy;
     
     % Evaluate solution on grid, discard points not in domain
-    ff = zz; ff(:) = u(zz(:)); ff(~inpolygonc(zz,w)) = NaN;
+    ff = zz; ff(:) = u(zz(:)); ff(~indomain(zz,w,p)) = NaN;
     
     % Get bounds for color scale, plot solution, domain and poles/bdd
     clf, shg
     axes(PO,[.4 .25 .6 .6])
     levels = linspace(min(min(real(ff))),max(max(real(ff))),20);
-    contour(sx,sy,ff,levels,LW,.5), colorbar, axis equal, hold on;
-    plot(w([1:end 1]), '-k', LW,1), plot(flat_poles, '.r', MS,5);
-    set(gca,FS,fs-1), plot(real(center),imag(center),'.k',MS,6), axis(ax)
+    if p.Results.plot3, plot3(xx,yy,ff), colorbar; 
+    else
+        contour(sx,sy,ff,levels,LW,.5), colorbar, axis equal, hold on;
+        plot(w([1:end 1]), '-k', LW,1), plot(flat_poles, '.r', MS,5);
+        set(gca,FS,fs-1), plot(real(center),imag(center),'.k',MS,6), axis(ax)
+    end
     title(['#bdd sample points = ' int2str(M) ...
         ', #poles = ' int2str(N1)],FS,fs,FW,NO), hold off;
     
     % Plot boundary error
-    axes(PO,[.1 .4 .3 .25])
+    axes(PO,[.05 .4 .25 .2])
     errmin = .01*tol; ws = 'error'; if p.Results.discont, ws = 'weighted error'; end
     axis([-pi pi .0001*errmin 1]), grid on
     semilogy(angle(bdd(:,1)-center),weights.*abs(u(bdd(:,1))-bdd(:,2)),'.k',MS,4), hold off
@@ -118,15 +134,19 @@ function u = laplace_solver(w, center, h, tol, varargin)
 end
 
 % Utility to check if point is in domain
-function in = inpolygonc(z,w) 
-    in = inpolygon(real(z),imag(z),real(w),imag(w));      
+function in = indomain(z, w, p)
+    % TODO: make this accurate for curved boundaries
+    if p.Results.curved, w = p.Results.curved_hull; end
+    in = inpolygon(real(z),imag(z),real(w),imag(w)); 
 end 
 
 % Generate exponentially clustered poles along vertex normals of domain
 % TODO: Vectorize computations further
-function poles = compute_poles(w, scale, n)
+function poles = compute_poles(w, scale, n, p)
     [m, ~] = size(w);
-    
+    curved = p.Results.curved;
+    if curved, curves = p.Results.curves; end
+
     % Edge normals
     n_e = zeros(m, 1);
     
@@ -147,6 +167,10 @@ function poles = compute_poles(w, scale, n)
     poles = cell(m,1);
     sigma = 4;
     re_entrant = real(n_v).*real(n_e*1i)+imag(n_v).*imag(n_e*1i);
+    if curved
+        re_entrant = -ones(m,1); 
+        n_v = cell2mat(curves(:,3));
+    end
     for i = 1:m
         N = n;
         % Check for re-entrancy 
@@ -157,22 +181,25 @@ function poles = compute_poles(w, scale, n)
         dist = exp(-sigma*(sqrt(N) - sqrt(1:N)))';
         pole = w(i) + n_v(i) * scale .* dist;
         % Check for poles in domain
-        poles{i} = pole(~inpolygonc(pole,w));
+        poles{i} = pole(~indomain(pole,w,p));
     end
 end
 
 % Generate boundary sample points and get pole scale (distance to corners)
 % TODO: Vectorize computations further
-function [bdd,dist] = bdd_sample(w, poles, h, n)
+function [bdd,dist] = bdd_sample(w, poles, h, n, p)
     [m, ~] = size(w);
     bdd = zeros(3*n*m,2);
     dist = zeros(3*n*m,1);
     bdd_i=1; dist_i=1;
+    curved = p.Results.curved;
+    if curved, curves = p.Results.curves; end
+    
     for i = 1:m
         [N, ~] = size(poles{i}); 
-        neg = w(mod(m + i - 2, m)+1) - w(i);
-        pos = w(mod(i, m)+1) - w(i);
-        
+        prev = mod(m + i - 2, m)+1; next = mod(i, m)+1;
+        neg = w(prev) - w(i); pos = w(next) - w(i);
+        if curved, neg = curves{prev,2}; pos = curves{i,2}; end
         % loop through poles, checking distance
         for j = 1:N
             dist(dist_i) = norm(w(i) - poles{i}(j)); 
@@ -180,11 +207,14 @@ function [bdd,dist] = bdd_sample(w, poles, h, n)
                 t = k/3 * dist(dist_i);
                 if(t < norm(neg))
                     bdd(bdd_i, 1) = t * neg/norm(neg) + w(i);
-                    bdd(bdd_i, 2) = h{mod(i+m-2, m)+1}(bdd(bdd_i,1));
+                    if curved, bdd(bdd_i, 1) = ...
+                        curves{prev, 1}(curves{prev, 2} - t); end
+                    bdd(bdd_i, 2) = h{prev}(bdd(bdd_i,1));
                     bdd_i = bdd_i + 1;
                 end
                 if(t < norm(pos))
                     bdd(bdd_i, 1) = t * pos/norm(pos) + w(i);
+                    if curved, bdd(bdd_i, 1) = curves{i, 1}(t); end
                     bdd(bdd_i, 2) = h{i}(bdd(bdd_i,1));
                     bdd_i = bdd_i + 1;
                 end
