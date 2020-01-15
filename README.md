@@ -8,12 +8,17 @@ Also included will be reference implementations and benchmarks using competing m
 
 ## Current Goals:
 
- - Re-implement method proposed by paper.
- - Merge features of existing implementation.
+ - Re-implement method proposed by paper (Completed)
+ - Merge features of existing implementation (Partial)
  - Extend implementation and theory to handle: 
-   - Non-Dirichlet boundary conditions
-   - Discontinous boundary conditions
-   - Non-connected domains
+   - Discontinous boundary conditions (Completed)
+   - Curved boundaries (Partial)
+   - Non-Dirichlet boundary conditions (Ongoing)
    - Elongated domains
+   - Corner-adaptive numbers of poles
+   - Non-connected domains
    - Slits in domains
+   - Multiply connected domains
+   - Transmission problems
+   - Poisson equations and similar
  - Benchmark solutions against traditional methods where possible.
