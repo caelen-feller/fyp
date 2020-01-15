@@ -11,6 +11,7 @@
 function u = laplace_solver(w, center, h, tol, varargin)
     p = inputParser;
     addOptional(p, 'tests', false);
+    addOptional(p, 'neumann', false);
     addOptional(p, 'discont', false);
     addOptional(p, 'curved', false)
     addOptional(p, 'curves', []);
@@ -31,7 +32,7 @@ function u = laplace_solver(w, center, h, tol, varargin)
         b_i = sort(imag(p.Results.curved_hull)); b_i = b_i([1 end]);
         scale = max([diff(b_r),diff(b_i)]);
     end
-    
+        
     % Confirm validity of poles and boundary sampling points if tests on
     if p.Results.tests
         poles = compute_poles_test(w, scale, 3, center);
