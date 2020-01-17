@@ -8,8 +8,26 @@
 %   tol = Desired accuracy of solution
 % Return Value:
 %   u = Solution to boundary value problem, valid on the domain only
+% Optional Named Parameter Pairs:
+%   'tests' = false, Turn on visual inspection of boundary and poles before
+%   computations.
+%   'neumann' = false, Turn on support for neumann boundary conditions.
+%   Note, this does not work with solely neumann, at least one must be
+%   dirichlet. Specify a side is neumann by adding 1 to second column, 0 if
+%   dirichlet, i.e. [{@(z) z} 1; repmat([{@(z) 0} 0]), length(w), 1]]
+%   'discont' = false, Weights approximation and error by distance to 
+%   nearest corner, allowing for convergence with corner discontinuities.
+%   'curved' = false, Allows for curved boundaries, specified in curves.
+%   Does not support neumann boundaries at same time currently.
+%   'curves' = [], Parameterisation of curved boundaries. Example row would
+%   contain [{@(t) exp(1i*(t+pi/4))} 1.5*pi 1], the function, maximal value
+%   for t and the normal at the corner.
+%   'curved_hull' = [], A polygonal representation of the boundary for use
+%   in inclusion testing and plotting.
+%   'plot3' = false, Plot using contours or 3D representation.
+
 function u = laplace_solver(w, center, h, tol, varargin)
-    p = inputParser;
+    p = inputParser; % Handle optional parameters
     addOptional(p, 'tests', false);
     addOptional(p, 'neumann', false); % Does not support curves yet
     addOptional(p, 'discont', false);
@@ -23,25 +41,28 @@ function u = laplace_solver(w, center, h, tol, varargin)
     curved = p.Results.curved;
     if curved, curves = p.Results.curves; end
     if curved && neumann, disp("Error: Curved domains are not supported with neumann boundaries yet"); end
+    
     % Get the maximal diameter of the domain
     w_r = sort(real(w)); w_r = w_r([1 end]);
     w_i = sort(imag(w)); w_i = w_i([1 end]);
     scale = max([diff(w_r),diff(w_i)]);
 
-    if curved
+    if curved % Get hull-based scale
         b_r = sort(real(p.Results.curved_hull)); b_r = b_r([1 end]);
         b_i = sort(imag(p.Results.curved_hull)); b_i = b_i([1 end]);
         scale = max([diff(b_r),diff(b_i)]);
     end
 
-    % Confirm validity of poles and boundary sampling points if tests on
+    % Confirm validity of poles and boundary sampling points if desired
     if p.Results.tests
-        poles = compute_poles_test(w, scale, 3, center);
-        bdd = bdd_sample_test(w, poles, h, 3);
+        clf
+        poles = compute_poles_test(w, scale, 3, center, p);
+        bdd = bdd_sample_test(w, poles, h, 3, tol, p); 
+        y = input('next? ');
     end
 
     % Increase n until convergence to specified tolerance.
-    prev_err = inf; bdd = [];
+    prev_err = inf; bdd = []; flat_poles = [];
     for n = 3:50
         % Exp. clustered poles at corners
         poles = compute_poles(w, scale, n, p);
@@ -53,6 +74,7 @@ function u = laplace_solver(w, center, h, tol, varargin)
         [M,~] = size(bdd);
         [Ms, ~] = size(b);
         newman = dist./(bdd - flat_poles);
+        
         % Polynomial approx in bulk
         N2 = ceil(n/2);
         runge = ((bdd - center)./scale).^(1:N2);
@@ -94,7 +116,7 @@ function u = laplace_solver(w, center, h, tol, varargin)
         c = (weight_m * D * A) \ (weight_m * b(:,1));
         warning(warn.state,'MATLAB:rankDeficientMatrix');
         % Check error on boundary
-        err_v = (weight_m*D*A*c - weight_m*b(:,1));
+        err_v = weight_m*(D*A*c - b(:,1));
         err = norm(err_v,inf);
         disp("err="+err);
         % Exit if tolerance reached or if error begins to increase
@@ -159,7 +181,7 @@ end
 
 % Utility to check if point is in domain
 function in = indomain(z, w, p)
-    % TODO: make this accurate for curved boundaries
+    % TODO: make this more accurate for curved boundaries
     if p.Results.curved, w = p.Results.curved_hull; end
     in = inpolygon(real(z),imag(z),real(w),imag(w));
 end
@@ -284,18 +306,16 @@ function [bdd,b,dist] = bdd_sample(w, poles, h, n, tol, p)
 end
 
 % Tests for the above functions
-function out = compute_poles_test(w, scale, n, center)
+function out = compute_poles_test(w, scale, n, center, p)
     LW = 'linewidth'; MS = 'markersize';
     plot(w([1:end 1]), '-k', LW,1);
-    out = compute_poles(w, scale, n);
+    out = compute_poles(w, scale, n, p);
     flat_poles = cell2mat(out);
-    hold on; plot(flat_poles, '.g', MS,5); hold off
+    hold on; plot(flat_poles, '.r', MS,5); hold off
 end
 
-function out = bdd_sample_test(w, poles, h, n)
-    out = bdd_sample(w, poles, h, n);
+function out = bdd_sample_test(w, poles, h, n, tol, p)
+    [out,b,dist] = bdd_sample(w, poles, h, n, tol, p);
     LW = 'linewidth'; MS = 'markersize';
     hold on; plot(out(:,1), '.g', MS,5); hold off
-    disp(' ')
-    y = input('next? ');
 end
