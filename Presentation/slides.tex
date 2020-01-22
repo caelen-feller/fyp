@@ -1,0 +1,270 @@
+\PassOptionsToPackage{force}{filehook}
+\documentclass[envcountsect notes]{beamer}       % print frame + notes
+%\documentclass[notes=only]{beamer}   % only notes
+%\documentclass{beamer}              % only frames
+
+\mode<presentation>
+{
+  \usetheme{Darmstadt}      
+  \usecolortheme{rose} 
+  \usefonttheme{professionalfonts}
+  \setbeamertemplate{navigation symbols}{}
+  \setbeamertemplate{caption}[numbered]
+  \setbeamertemplate{headline}{}
+} 
+\usepackage{xpatch}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{bookmark}
+\usepackage{caption}
+\usepackage{svg}
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\graphicspath{ {./images/} }
+
+\newcommand{\bb}[1]{\mathbb{#1}}
+\newcommand{\abs}[1]{\lvert #1 \rvert}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\hol}[1]{\mathcal{O}\left(#1\right)}
+\newtheorem{proposition}{Proposition}
+
+\title[Solving Laplace Problems with Corner Singularities]{Solving Laplace Problems with Corner Singularities}
+\author[Feller,Caelen]{Caelen Feller \\ \vspace{1cm} \footnotesize Supervised by: Prof. Kirk M. Soodhalter}
+\date{January 24 2020}
+
+\xpatchcmd{\itemize}
+  {\def\makelabel}
+  {\setlength{\itemsep}{0.7em}\def\makelabel}
+  {}
+  {}
+
+\begin{document}
+
+\frame{\titlepage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%             INTRODUCTION         %%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Introduction}
+\subsection{Overview}
+\begin{frame}{Theory Overview}
+    \begin{columns}
+        \column{0.45\textwidth}
+        \begin{block}{Approximation Scheme}
+            \begin{gather*}
+                r(z) = \sum^{N_1}_{j=1} \underbrace{\frac{a_j}{z - z_j}}_{\text{Newman}} 
+                \\+ \sum^{N_2}_{j=0}\underbrace{b_j(z-z_*)^j}_{\text{Runge}}
+            \end{gather*}
+        \end{block}
+        \column{0.5\textwidth}
+        \begin{figure}[t]
+            \includegraphics[trim={11cm 5cm 10cm 5cm},clip,width=0.45\paperwidth]{L_poles.pdf}
+        \end{figure}
+    \end{columns}
+\end{frame}
+
+\subsection{Background}
+\begin{frame}{Background}
+    \begin{block}{A short timeline of results used}
+    \begin{itemize}
+        \item 1885 - Carl Runge proves Runge's theorem, allowing uniform convergence using polynomials within the bulk.
+        \item 1964 - D.J. Newman proves root-exponential convergence for $\lvert x \rvert$ using rational approximations.
+        \item 2003 - Herbert Stahl proves root-exp for $\lvert x \rvert ^\alpha$
+        \item 2019 - Trefethen et. al show root-exp. convergence for this.
+    \end{itemize}
+    \end{block}
+    \begin{definition}[Root-Exponential Convergence]
+        Given a sequence $\left\{x_n\right\}$, converging to a true value $x$.
+        Convergence of the sequence is root-exponential iff 
+        $$\epsilon_n = \lvert x_n - x \rvert = O\left(\exp\left(-C\sqrt{N}\right)\right),\ N \rightarrow \infty,\ C > 0$$ 
+    \end{definition}   
+\end{frame}
+
+\subsection{Goals}
+\begin{frame}{Goals}
+    \setbeamerfont*{itemize/enumerate body}{size=\large}
+    \setbeamerfont*{itemize/enumerate subbody}{parent=itemize/enumerate body}
+    \setbeamerfont*{itemize/enumerate subsubbody}{parent=itemize/enumerate body}
+        \begin{itemize}
+            \item Investigation and implementation of Trefefthen's results.
+            \item Extension of theory and/or implementation completed for: 
+           \begin{itemize}
+                \item Non-continuous boundary conditions.
+                \item Non-Dirichlet boundary conditions.
+                \item Curved domains. 
+            \end{itemize}
+            \item Verification of Trefefthen's results vs traditional methods
+        \end{itemize} 
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%         THEORY OVERVIEW          %%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Theory}
+
+\subsection{Theorems}
+\begin{frame}{Root-Convergence Theorem}
+    \begin{block}{Theorem}
+        Let $\Omega$ be a convex polygonal domain with corners $\omega_1\dots,\omega_m$, 
+        $\ f \in\hol{\Omega}$, with holom. continuation to $\Delta_{\epsilon_k}(\omega_k) \setminus $ the exterior bisector of domain at $\omega_k$.
+        \begin{gather*}
+            \text{If }\exists\ \delta > 0 \text{ s.t. }\lvert f(z) - f(\omega_k) \rvert  = O(\lvert z - \omega_k\rvert^\delta),\ z \rightarrow \omega_k \implies \\ 
+            \exists\text{ degree }n\text{ rational functions }\left\{ r_i \right\},\ i > 0 \text{ s.t. }
+            \lvert f - r\rvert_\Omega = \\
+            O(\exp(-C\sqrt{n})), C > 0,\ n \rightarrow \infty \text{, with the finite poles of each } \\
+            r_n \text{ clustered exponentially along the exterior bisectors of }\\
+            \text{the domain such that the number of poles near a corner grows }\\
+            \text{in proportion to } n,\text{as } n \rightarrow \infty
+        \end{gather*}
+        
+    \end{block}
+\end{frame}
+
+% (Consider dropping)
+\begin{frame}{Harmonic Functions }
+    \begin{block}{Harmonic Functions}
+        \begin{itemize}
+            \item Harmonic functions can be associated with holomorphic ones using Hilbert transform.
+            \item Imaginary part of transformed function can also be extended across boundaries and about slits with correct behaviour.
+            \item Previous theorem thus holds for harmonic functions
+            \item Laplace solutions are harmonic
+            \item Extensions for other functions in early days
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+% \begin{frame}{Non-Convex Domains}
+%     Can position along both sides for all $\theta < \pi$. 
+%     Potential Function for general non-convex domains.
+% \end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%         IMPLEMENTATION           %%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Implementation}
+
+\subsection{Algorithm}
+
+\begin{frame}{Algorithm}
+    For boundary $\Gamma$, with corners $\omega_1, \dots, \omega_m$, boundary function 
+    $h$ and error $\epsilon$, with increasing values of $n$. 
+    \begin{enumerate}
+        \item Fix $N_1=O(mn)$ poles clustered outside corners.
+        \item Fix $N_2+1=O(n)$ monomials, $1, \dots, (z-z_*)^{N_2}$, and set $N = N_1 + N_2 + 1$
+        \item $M \approx 3N$ sample points on the boundary clustered near the corners.
+        \item Evaluate at sample points to form $M \times N$ matrix A and $M$-vector b
+        \item \textbf{Solve the least-squares problem}, $Ac \approx b$ for c.
+        \item Exit loop if $\norm{Ax - b}_\infty < \epsilon$.
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}{Boundary Sampling Method}
+    \begin{figure}[t]
+        \includegraphics[trim={10cm 6cm 10cm 6cm},clip, width=0.7\textwidth]{L_poles_bdd.pdf}
+        \vspace{-3em}
+        \caption*{Boundary Sampling points in green}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Full Solution}
+    \begin{figure}[t]
+        \includegraphics[width=\textwidth]{L_result.pdf}
+        \vspace{-3em}
+        \caption*{L-Shaped domain with solution}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Demonstration}
+    \begin{figure}[t]
+        \includegraphics[width=\textwidth]{L_discont.pdf}
+        \vspace{-3em}
+        \caption*{Discontinuous Boundary Conditions}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Demonstration}
+    \begin{figure}[t]
+        \includegraphics[width=\textwidth]{L_neumann.pdf}
+        \vspace{-3em}
+        \caption*{Robin Boundary Conditions}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Demonstration}
+    \begin{figure}[t]
+        \includegraphics[width=\textwidth]{circular_abs_lim.pdf}
+        \vspace{-3em}
+        \caption*{Curved boundaries}
+    \end{figure}
+\end{frame}
+
+\subsection{Conditioning and Stability}
+\begin{frame}{Limit to Accuracy}
+    \begin{figure}[t]
+        \vspace{-1em}
+        \includegraphics[width=\textwidth]{L_abs_limit.pdf}
+        \vspace{-3em}
+        \caption*{Upper bound to accuracy ~ $1e^{-10}$}
+    \end{figure}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%         CONCLUSION               %%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Conclusion}
+\begin{frame}{Further Goals}
+    In the remainder of the time allocated for this project, I wish to extend this method to cover 
+    at least the following cases:
+    \begin{itemize}
+        \item Elongated domains
+        \item Domains with slits \& multiply connected domains
+        \item Non-convex domains \& more complex curved domains
+        \item Transmission problems
+    \end{itemize}
+    \vspace{1em}
+    I wish to address the lack of stability in the solution for high precision, whether is a software or analytic issue, and understand where this cap in accuracy comes from.
+\end{frame}
+
+\frame[plain]{\centering\Huge Thank you!}
+
+\begin{frame}{Elongated Domain}
+    \begin{figure}[t]
+        \vspace{-1em}
+        \includegraphics[width=\textwidth]{Long_no_fix.pdf}
+        \vspace{-3em}
+        \caption*{No convergence in case of elongated domain}
+    \end{figure}
+\end{frame}
+\begin{frame}{Elongated Domain}
+    \begin{figure}[t]
+        \vspace{-1em}
+        \includegraphics[width=\textwidth]{Long_fix.pdf}
+        \vspace{-3em}
+        \caption*{Potential fix to domain}
+    \end{figure}
+\end{frame}
+\begin{frame}{Re-Entrant Spike}
+    \begin{figure}[t]
+        \vspace{-1em}
+        \includegraphics[width=\textwidth]{spike_ok.pdf}
+        \vspace{-3em}
+        \caption*{Re-Entrant Spike converges slowly}
+    \end{figure}
+\end{frame}
+\begin{frame}{Salient Spike}
+    \begin{figure}[t]
+        \vspace{-1em}
+        \includegraphics[width=\textwidth]{spike_salient.pdf}
+        \vspace{-3em}
+        \caption*{Salient Spike converges faster}
+    \end{figure}
+\end{frame}
+
+\end{document}
+\begin{filecontents*}{references.bib}
+\end{filecontents*} 
+\bibliography{references}
