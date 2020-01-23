@@ -57,12 +57,14 @@ function u = laplace_solver(w, center, h, tol, varargin)
     if p.Results.tests
         clf
         poles = compute_poles_test(w, scale, 3, center, p);
-        bdd = bdd_sample_test(w, poles, h, 3, tol, p); 
+        y = input('next? ');
+        bdd = bdd_sample_test(w, poles, h, 3, tol, center, p); 
         y = input('next? ');
     end
 
     % Increase n until convergence to specified tolerance.
     prev_err = inf; bdd = []; flat_poles = [];
+    errs = inf(1,50); Nvec = zeros(1,50);
     for n = 3:50
         % Exp. clustered poles at corners
         poles = compute_poles(w, scale, n, p);
@@ -110,7 +112,7 @@ function u = laplace_solver(w, center, h, tol, varargin)
 
         weights = weights(b_neumann == 0);
         weight_m = spdiags(sqrt(weights.'), 0, Ms, Ms);
-
+        
         % Solve using backslash, matricies are always ill-conditioned
         warn = warning('off','MATLAB:rankDeficientMatrix');
         c = (weight_m * D * A) \ (weight_m * b(:,1));
@@ -121,12 +123,15 @@ function u = laplace_solver(w, center, h, tol, varargin)
         disp("err="+err);
         % Exit if tolerance reached or if error begins to increase
         % as convergence is not possible due to numerical instability.
-        if err <= tol || err > prev_err*10
+        errs(n) = err; Nvec(n) = n;
+        if err <= tol %|| err > prev_err*10
             break;
         end
         prev_err = err;
     end
-
+    errs = errs(Nvec > 0);
+    Nvec = Nvec(Nvec > 0);
+    
     % Construct proposed solution
     u = @(z) [real(((z-center)./scale).^(1:N2)) ...
             imag(((z-center)./scale).^(1:N2))   ...
@@ -137,7 +142,7 @@ function u = laplace_solver(w, center, h, tol, varargin)
     % Plotting Config
     LW = 'linewidth'; MS = 'markersize'; FS = 'fontsize';
     fs = 8; PO = 'position'; FW = 'fontweight'; NO = 'normal';
-
+    
     if curved, w_r = b_r; w_i = b_i; w = p.Results.curved_hull; end
     ax = [w_r(1:2); w_i(1:2)] + .2*scale*[-1 1 -1 1]';
     axwide = [w_r(1:2); w_i(1:2)] + 1.1*scale*[-1 1 -1 1]';
@@ -148,11 +153,20 @@ function u = laplace_solver(w, center, h, tol, varargin)
 
     % Evaluate solution on grid, discard points not in domain
     ff = zz; ff(:) = u(zz(:)); ff(~indomain(zz,w,p)) = NaN;
-
+    
     % Get bounds for color scale, plot solution, domain and poles/bdd
     clf, shg
-    axes(PO,[.4 .25 .6 .6])
     levels = linspace(min(min(real(ff))),max(max(real(ff))),20);
+    
+    if p.Results.tests
+        contour(sx,sy,ff,levels,LW, 1), colorbar, hold on;
+        plot(w([1:end 1]), '-k', LW,1), plot(flat_poles, '.r', MS,7), ...
+            plot(bdd, '.g', MS, 7);
+        plot(real(center),imag(center),'.k',MS,7), hold off;
+        y = input('next? ');
+    end
+    clf, shg
+    axes(PO,[.4 .25 .6 .6])
     if p.Results.plot3, plot3(xx,yy,ff), colorbar;
     else
         contour(sx,sy,ff,levels,LW,.5), colorbar, axis equal, hold on;
@@ -163,18 +177,26 @@ function u = laplace_solver(w, center, h, tol, varargin)
         ', #poles = ' int2str(N1)],FS,fs,FW,NO), hold off;
 
     % Plot boundary error
-    axes(PO,[.05 .4 .25 .2])
-    errmin = .01*tol; ws = 'error'; if p.Results.discont, ws = 'weighted error'; end
+    axes(PO,[.05 .6 .25 .2])
+    errmin = .01*tol; 
+    ws = 'error'; if p.Results.discont, ws = 'weighted error'; end
     axis([-pi pi .0001*errmin 1]), grid on
 
     semilogy(angle(bdd(b_neumann == 0) - center), abs(err_v),'.k',MS,4), hold off
 
     set(gca,'ytick',10.^(-16:4:0))
     set(gca,'xtick',pi*(-1:1),'xticklabel',{'-\pi','0','\pi'})
-    set(gca,FS,fs-1), xlabel('angle on boundary wrt wc',FS,fs)
+    set(gca,FS,fs-1), xlabel('angle on boundary wrt wc',FS,fs), ylabel(ws, FS, fs)
     title([ws ' on boundary'],FS,fs,FW,NO)
 
-    % TODO: Plot speed of convergence
+    % Plot speed of convergence
+    axes(PO,[.05 .2 .25 .2]); ws = 'log-error'; if p.Results.discont, ws = 'weighted log-error'; end
+    semilogy(sqrt(Nvec),errs,'.-k',LW,0.7,MS,10), grid on, hold on
+    errmin = .01*tol; axis([0.9*min(sqrt(Nvec)) 1.1*max(sqrt(Nvec)) errmin 10])
+    set(gca,FS,fs-1), title('convergence',FS,fs,FW,NO)
+    xlabel('sqrt(DoF)',FS,fs), ylabel(ws,FS,fs)
+    set(gca,'ytick',10.^(-16:4:0))
+    
     % TODO: A posteriori error on finer boundary sampling
 
 end
@@ -311,11 +333,12 @@ function out = compute_poles_test(w, scale, n, center, p)
     plot(w([1:end 1]), '-k', LW,1);
     out = compute_poles(w, scale, n, p);
     flat_poles = cell2mat(out);
-    hold on; plot(flat_poles, '.r', MS,5); hold off
+    hold on, plot(flat_poles, '.r', MS,7), plot(real(center),imag(center),'.k',MS,7), hold off;
 end
 
-function out = bdd_sample_test(w, poles, h, n, tol, p)
+function out = bdd_sample_test(w, poles, h, n, tol, center, p)
     [out,b,dist] = bdd_sample(w, poles, h, n, tol, p);
     LW = 'linewidth'; MS = 'markersize';
-    hold on; plot(out(:,1), '.g', MS,5); hold off
+    hold on, plot(out(:,1), '.g', MS,7); 
+    plot(real(center),imag(center),'.k',MS,7), hold off;
 end
