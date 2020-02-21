@@ -6,19 +6,18 @@ The project focuses on the development of methods proposed by [Gopal and Trefeth
 Also included will be reference implementations and benchmarks using competing methods.
 
 
-## Current Goals:
+## Goals of Project:
 
- - Re-implement method proposed by paper (Completed)
- - Merge features of existing implementation (Partial)
+ - Re-implement method proposed by paper 
+ - Merge features of existing implementation 
  - Extend implementation and theory to handle: 
-   - Discontinous boundary conditions (Completed)
-   - Curved boundaries (Partial)
-   - Non-Dirichlet boundary conditions (Ongoing)
-   - Elongated domains
-   - Corner-adaptive numbers of poles
-   - Non-connected domains
-   - Slits in domains
-   - Multiply connected domains
-   - Transmission problems
-   - Poisson equations and similar
- - Benchmark solutions against traditional methods where possible.
+   - Discontinous boundary conditions 
+   - Curved boundaries 
+   - Non-Dirichlet boundary conditions 
+ - Benchmark solutions against traditional methods where possible
+
+
+## Literature
+
+You can find my project report [here](https://raw.githubusercontent.com/caelen-feller/fyp/master/Literature/diss.pdf), with accompanying poster giving an overview [here](https://raw.githubusercontent.com/caelen-feller/fyp/master/Literature/poster.pdf).
+A presentation given on the project while in progress is shown [here](https://raw.githubusercontent.com/caelen-feller/fyp/master/Literature/slides.pdf).

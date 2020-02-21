@@ -35,7 +35,12 @@ function u = laplace_solver(w, center, h, tol, varargin)
     addOptional(p, 'curves', []);
     addOptional(p, 'curved_hull', []);
     addOptional(p, 'plot3', false);
-
+    addOptional(p, 'heatmap', false);
+    addOptional(p, 'solfunc', false);
+    addOptional(p, 'plots', true);
+    addOptional(p, 'fixed', false);
+    addOptional(p, 'sigma', 4);
+    
     parse(p, varargin{:});
     neumann = p.Results.neumann;
     curved = p.Results.curved;
@@ -63,9 +68,10 @@ function u = laplace_solver(w, center, h, tol, varargin)
     end
 
     % Increase n until convergence to specified tolerance.
+    max_steps = 40;
     prev_err = inf; bdd = []; flat_poles = [];
-    errs = inf(1,50); Nvec = zeros(1,50);
-    for n = 3:50
+    errs = inf(1,max_steps);conds = zeros(1,max_steps); Nvec = zeros(1,max_steps);
+    for n = 3:max_steps
         % Exp. clustered poles at corners
         poles = compute_poles(w, scale, n, p);
         flat_poles = cell2mat(poles).';
@@ -114,21 +120,47 @@ function u = laplace_solver(w, center, h, tol, varargin)
         
         % Solve using backslash, matricies are always ill-conditioned
         warn = warning('off','MATLAB:rankDeficientMatrix');
+        
+        % Truncated QR-Solver
+        % Uses StrongRRQR, found at https://math.berkeley.edu/~mgu/MA273/Strong_RRQR.pdf
+        % Implemented by https://www.mathworks.com/matlabcentral/fileexchange/69139-strong-rank-revealing-qr-decomposition
+%         f = 1.03;
+%         [Q, R, perm] = sRRQR(D*A, f, 'tol', 10^-12);
+%         [~,perminv] = sort(perm);
+%         c = (R\(Q.'*b(:,1)));
+%         c = c(perminv);
+
+        % Normal QR-Solver
+%         [Q,R,perm] = qr(D*A);
+%         c = perm*(R\(Q.'*b(:,1)));
+        
+        % Normal SVD Solver
+%         [U,S,V] = svd(D*A);
+%         Truncate it 
+%         truncSVD = @(U,S,V,p) V(:,1:p)*diag(1./diag(S(1:p,1:p)))*U(:,1:p)';
+%         c = truncSVD(U,S,V,N)*b(:,1);
+%         c = V*(S\U.'*b(:,1));
+%         
+        % Backslash solver
         c = (D * A) \ (b(:,1));
+        
         warning(warn.state,'MATLAB:rankDeficientMatrix');
         % Check error on boundary
         err_v = weight_m*(D*A*c - b(:,1));
         err = norm(err_v,inf);
         disp("err="+err);
+%         disp("cond="+cond(D*A));
+%         conds(n) = cond(D*A);
         % Exit if tolerance reached or if error begins to increase
         % as convergence is not possible due to numerical instability.
         errs(n) = err; Nvec(n) = n;
-        if err <= tol %|| err > prev_err*10
+        if ~p.Results.fixed && err <= tol %|| err > prev_err*10
             break;
         end
         prev_err = err;
     end
     errs = errs(Nvec > 0);
+    conds = conds(Nvec > 0);
     Nvec = Nvec(Nvec > 0);
     
     % Construct proposed solution
@@ -136,12 +168,12 @@ function u = laplace_solver(w, center, h, tol, varargin)
             imag(((z-center)./scale).^(1:N2))   ...
             real(dist./(z-flat_poles))        ...
             imag(dist./(z-flat_poles)) ones(size(z))]*c;
-
+    
     % Plot solution, poles and boundary sampling points
     % Plotting Config
     LW = 'linewidth'; MS = 'markersize'; FS = 'fontsize';
-    fs = 8; PO = 'position'; FW = 'fontweight'; NO = 'normal';
-    
+    fs = 16; PO = 'position'; FW = 'fontweight'; NO = 'normal';
+    lw=1;
     if curved, w_r = b_r; w_i = b_i; w = p.Results.curved_hull; end
     ax = [w_r(1:2); w_i(1:2)] + .2*scale*[-1 1 -1 1]';
     axwide = [w_r(1:2); w_i(1:2)] + 1.1*scale*[-1 1 -1 1]';
@@ -155,49 +187,90 @@ function u = laplace_solver(w, center, h, tol, varargin)
     
     % Get bounds for color scale, plot solution, domain and poles/bdd
     clf, shg
+    figsize = [0,0,10,8];
+    fontsize = 16;
+    h = figure;
+    
     levels = linspace(min(min(real(ff))),max(max(real(ff))),20);
+    if p.Results.plots % Begin Plots
     
     if p.Results.tests
         contour(sx,sy,ff,levels,LW, 1), colorbar, hold on;
-        plot(w([1:end 1]), '-k', LW,1), plot(flat_poles, '.r', MS,7), ...
-            plot(bdd, '.g', MS, 7);
-        plot(real(center),imag(center),'.k',MS,7), hold off;
-        y = input('next? ');
+        plot(w([1:end 1]), '-k', LW,1), plot(flat_poles, '.r', MS,12), ...
+            plot(bdd, '.g', MS, 12);
+        plot(real(center),imag(center),'.k',MS,12), hold off;
+        y = input('next? '); 
+
     end
     clf, shg
     axes(PO,[.4 .25 .6 .6])
     if p.Results.plot3, plot3(xx,yy,ff), colorbar;
     else
         contour(sx,sy,ff,levels,LW,.5), colorbar, axis equal, hold on;
-        plot(w([1:end 1]), '-k', LW,1), plot(flat_poles, '.r', MS,5);
-        set(gca,FS,fs-1), plot(real(center),imag(center),'.k',MS,6), axis(ax)
+        plot(w([1:end 1]), '-k', LW,1), plot(flat_poles, '.r', MS,10);
+        set(gca,FS,fs-1,LW,lw), plot(real(center),imag(center),'.k',MS,12), axis(ax)
     end
     title(['#bdd sample points = ' int2str(M) ...
-        ', #poles = ' int2str(N1)],FS,fs,FW,NO), hold off;
+        ', #poles = ' int2str(N1)],FS,fs,FW,NO, ...
+        "Interpreter", "latex"), hold off;
 
+    set(gca, 'Units', 'normalized',...
+        'FontUnits', 'points',...
+        'FontWeight', 'normal',...
+        'FontSize', fontsize, ...
+        'FontName', 'Times',...
+        'TickLabelInterpreter', 'latex',...
+        LW,lw);
+    
     % Plot boundary error
     axes(PO,[.05 .6 .25 .2])
     errmin = .01*tol; 
     ws = 'error'; if p.Results.discont, ws = 'weighted error'; end
     axis([-pi pi .0001*errmin 1]), grid on
 
-    semilogy(angle(bdd(b_neumann == 0) - center), abs(err_v),'.k',MS,4), hold off
+    semilogy(angle(bdd(b_neumann == 0) - center), abs(err_v),'.k',MS,6), hold off
 
     set(gca,'ytick',10.^(-16:4:0))
     set(gca,'xtick',pi*(-1:1),'xticklabel',{'-\pi','0','\pi'})
-    set(gca,FS,fs-1), xlabel('angle on boundary wrt wc',FS,fs), ylabel(ws, FS, fs)
-    title([ws ' on boundary'],FS,fs,FW,NO)
+    set(gca,FS,fs-1,LW,lw), xlabel('angle on boundary wrt $z_*$',FS,fs, ...
+        "Interpreter", "latex"), ylabel(ws, FS, fs)
+    title([ws ' on boundary'],FS,fs,FW,NO,"Interpreter", "latex")
 
+    set(gca, 'Units', 'normalized',...
+        'FontUnits', 'points',...
+        'FontWeight', 'normal',...
+        'FontSize', fontsize, ...
+        'FontName', 'Times',...
+        'TickLabelInterpreter', 'latex');
     % Plot speed of convergence
     axes(PO,[.05 .2 .25 .2]); ws = 'log-error'; if p.Results.discont, ws = 'weighted log-error'; end
     semilogy(sqrt(Nvec),errs,'.-k',LW,0.7,MS,10), grid on, hold on
+%     semilogy(sqrt(Nvec),1./conds,'.-r',LW,0.7,MS,10), grid on, hold on
     errmin = .01*tol; axis([0.9*min(sqrt(Nvec)) 1.1*max(sqrt(Nvec)) errmin 10])
-    set(gca,FS,fs-1), title('convergence',FS,fs,FW,NO)
-    xlabel('sqrt(DoF)',FS,fs), ylabel(ws,FS,fs)
-    set(gca,'ytick',10.^(-16:4:0))
+    set(gca,FS,fs-1,LW,lw), title('convergence',FS,fs,FW,NO, ...
+        "Interpreter", "latex")
+    xlabel('$\sqrt{n}$',FS,fs, ...
+        "Interpreter", "latex"), ylabel(ws,FS,fs)
+    set(gca,'ytick',10.^(-16:4:0),LW,lw)
     
-    % TODO: A posteriori error on finer boundary sampling
+    set(h, 'Units','Inches');
+    pos = get(h,'Position');
+    set(h,...
+        'Position', figsize,...
+        'Units', 'Inches', ...
+        'PaperPositionMode','Auto',...
+        'PaperUnits','Inches')
+    set(gca, 'Units', 'normalized',...
+        'FontUnits', 'points',...
+        'FontWeight', 'normal',...
+        'FontSize', fontsize, ...
+        'FontName', 'Times',...
+        'TickLabelInterpreter', 'latex');
+    print(h,'poster\figures\curved-L','-depsc')
 
+    end % End Plotting
+    % TODO: A posteriori error on finer boundary sampling
+    u = {sx,sy,ff, err, errs, n};
 end
 
 % Utility to check if point is in domain
@@ -211,6 +284,7 @@ end
 % TODO: Vectorize computations further
 function poles = compute_poles(w, scale, n, p)
     [m, ~] = size(w);
+    sigma = p.Results.sigma;
     curved = p.Results.curved;
     if curved, curves = p.Results.curves; end
 
@@ -232,7 +306,6 @@ function poles = compute_poles(w, scale, n, p)
 
     % Pole generation
     poles = cell(m,1);
-    sigma = 4;
     re_entrant = real(n_v).*real(n_e*1i)+imag(n_v).*imag(n_e*1i);
     if curved
         re_entrant = -ones(m,1);
@@ -328,11 +401,31 @@ end
 
 % Tests for the above functions
 function out = compute_poles_test(w, scale, n, center, p)
+    figsize = [0,0,2,2];
+    fontsize = 9;
+    h = figure;
+    
     LW = 'linewidth'; MS = 'markersize';
     plot(w([1:end 1]), '-k', LW,1);
     out = compute_poles(w, scale, n, p);
     flat_poles = cell2mat(out);
     hold on, plot(flat_poles, '.r', MS,7), plot(real(center),imag(center),'.k',MS,7), hold off;
+    ylim([-0.5 2.5])
+    xlim([-0.5 2.5])
+    set(h, 'Units','Inches');
+        pos = get(h,'Position');
+        set(h,...
+            'Position', figsize,...
+            'Units', 'Inches', ...
+            'PaperPositionMode','Auto',...
+            'PaperUnits','Inches')
+        set(gca, 'Units', 'normalized',...
+            'FontUnits', 'points',...
+            'FontWeight', 'normal',...
+            'FontSize', fontsize, ...
+            'FontName', 'Times',...
+            'TickLabelInterpreter', 'latex');
+        print(h,'report\figures\domain','-depsc')
 end
 
 function out = bdd_sample_test(w, poles, h, n, tol, center, p)
