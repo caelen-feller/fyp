@@ -100,7 +100,7 @@ function u = laplace_solver(w, center, h, tol, varargin)
             zero_i = 1;
             for i = 1:Ms
                 if b(i,2) == 1
-                    D(i,:) = [zeros(1, zero_i-1) 1 -1 zeros(1, M-zero_i-1)];
+                    D(i,:) = [zeros(1, zero_i-1) 1/tol -1/tol zeros(1, M-zero_i-1)];
                     b_neumann(zero_i+1) = 1;
                     zero_i = zero_i + 2;
                 else
@@ -109,13 +109,12 @@ function u = laplace_solver(w, center, h, tol, varargin)
                 end
             end
         end
-
         weights = weights(b_neumann == 0);
         weight_m = spdiags(sqrt(weights.'), 0, Ms, Ms);
         
         % Solve using backslash, matricies are always ill-conditioned
         warn = warning('off','MATLAB:rankDeficientMatrix');
-        c = (weight_m * D * A) \ (weight_m * b(:,1));
+        c = (D * A) \ (b(:,1));
         warning(warn.state,'MATLAB:rankDeficientMatrix');
         % Check error on boundary
         err_v = weight_m*(D*A*c - b(:,1));
